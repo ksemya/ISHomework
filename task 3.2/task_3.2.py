@@ -35,7 +35,7 @@ def read_item_names():
     with io.open(file_name, 'r', encoding='ISO-8859-1') as f:
         for line in f:
             line = line.split('|')
-            rid_to_name[line[0]] = (line[1], line[2])
+            rid_to_name[line[0]] = (line[1][0:-6]).strip()
     return rid_to_name
 
 
@@ -50,31 +50,39 @@ def getFilmUri(movie: str):
     filmUri = list(json['entities'])[0]
     return filmUri
 
-#не получится использовать название фильма, полученное с помощью read_item_names(), потому что в базе знаний он хранится с коротким названием
-filmUri = getFilmUri('Dr. Strangelove')
-sparql = SPARQLWrapper("http://query.wikidata.org/sparql")
-sparql.setQuery("""
-SELECT DISTINCT ?cast ?castName
-WHERE
-{
-       wd:%s wdt:P161 ?cast.
-       ?cast rdfs:label ?castName.
-       FILTER(lang(?castName) = "en")
-        
-       ?oscar wdt:P31 wd:Q19020.
-  
-       ?cast wdt:P31 wd:Q5 .
-       ?cast wdt:P21 wd:Q6581072 .
-       OPTIONAL{ ?cast wdt:P166 ?award 
-                 FILTER(?award != ?oscar) . }
- 
-}""" % filmUri)
-sparql.setReturnFormat(JSON)
-results = sparql.query().convert()
+top_n = get_top_n(predictions)
+rid_to_name = read_item_names()
 
-print("Query results:")
-for result in results["results"]["bindings"]:
-    print(result["cast"]["value"] , result["castName"]["value"])
+print('User ' + user_id)
+for movie_rid, raiting in top_n[user_id]:
+    print(rid_to_name[movie_rid])
+    filmUri = getFilmUri(rid_to_name[movie_rid])
+    if filmUri=="-1" : 
+        print("Can not find information for current film")
+    else:
+        sparql = SPARQLWrapper("http://query.wikidata.org/sparql")
+        sparql.setQuery("""
+        SELECT DISTINCT ?cast ?castName
+        WHERE
+        {
+	         wd:%s wdt:P161 ?cast.
+	         ?cast rdfs:label ?castName.
+	         FILTER(lang(?castName) = "en")
+		
+	         ?oscar wdt:P31 wd:Q19020.
+  
+	        ?cast wdt:P31 wd:Q5 .
+	        ?cast wdt:P21 wd:Q6581072 .
+	        OPTIONAL{ ?cast wdt:P166 ?award 
+				 FILTER(?award != ?oscar) . }
+ 
+        }""" % filmUri)
+        sparql.setReturnFormat(JSON)
+        results = sparql.query().convert()
+
+        print("Query results:")
+        for result in results["results"]["bindings"]:
+        	print(result["cast"]["value"] , result["castName"]["value"])
 
 
 
